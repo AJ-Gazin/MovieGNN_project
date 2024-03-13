@@ -6,23 +6,35 @@ import requests
 import random
 from io import BytesIO
 import streamlit_modal as modal
-
+import json
 
 # StableDiffusion
+#TODO : hide api key
 API_KEY = "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" 
 API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
 
+def load_credentials(filename="creds.dat"):
+    """Loads ArangoDB credentials from a JSON file."""
+    try:
+        with open(filename, "r") as f:
+            credentials = json.load(f)
+            return credentials
+    except FileNotFoundError:
+        st.error(f"Credentials file '{filename}' not found. Please create it.")
+        return None
+    
 
-
+credentials = load_credentials()
 # ArangoDB connection details
 ARANGO_URL = "https://tutorials.arangodb.cloud:8529"
-ARANGO_USER = "TUThe5pvbu55xsalxczfo1dip"
-ARANGO_PASSWORD = "TUTkxua8mas5yphb2jhl4lh7p"
-ARANGO_DATABASE = "TUT8zj5z8o7wxqtndgnevej"
+ARANGO_USER = credentials["username"]
+ARANGO_PASSWORD = credentials["password"]
+ARANGO_DATABASE = credentials["dbName"]
 
 # Connect to ArangoDB
 client = ArangoClient(hosts=ARANGO_URL)
 db = client.db(ARANGO_DATABASE, username=ARANGO_USER, password=ARANGO_PASSWORD)
+
 
 
 def get_movie_title_and_desc(movie_id):
@@ -45,9 +57,9 @@ def generate_poster(movie_title):
     seed = random.randint(0, 2**32 - 1)
     payload = {
         "inputs": movie_title,
-        "parameters": {
-            "seed": seed
-        }
+        # "parameters": {
+        #     "seed": seed
+        # }
     }
 
     try:
@@ -64,7 +76,7 @@ def generate_poster(movie_title):
 
     
 # Streamlit app structure
-st.title("Movie Recommendation App")
+st.title("Movie Recommender")
 user_id = st.number_input("Enter your user ID:", min_value=0)
 
 if st.button("Get Recommendations"):
@@ -81,9 +93,11 @@ if st.button("Get Recommendations"):
         for i, movie_id in enumerate(recommended_movie_ids):
             with cols[i % 3]:  # Distribute movies evenly across columns
                 movie_title, movie_description = get_movie_title_and_desc(movie_id)
+                truncated_description = movie_description[:50] + "..." if len(movie_description) > 50 else movie_description
                 try:
-                    image = generate_poster(movie_title)  # Generate poster
-                    st.markdown(movie_description)
+                    image = generate_poster(movie_title)  # Generate poster   
+                    st.write(truncated_description)
+                    
                     #st.image(image, caption=movie_title, width=200)  # Set width for half-size
                     # if st.button(f"Show Description for {movie_title}", key=f"modal_{i}"):
                     #     modal.open_modal(f"Description: {movie_title}", movie_description, key=f"modal_{i}_content")
