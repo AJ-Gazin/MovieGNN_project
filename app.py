@@ -8,9 +8,14 @@ from io import BytesIO
 import streamlit_modal as modal
 import json
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv() #load environment variables from .env file
+
 # StableDiffusion
 #TODO : hide api key
-API_KEY = "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" 
+API_KEY = os.getenv("HUGGINGFACE_API_KEY")
 API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
 
 def load_credentials(filename="creds.dat"):
