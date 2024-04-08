@@ -10,55 +10,21 @@ from torch_geometric.nn import SAGEConv, to_hetero, Linear
 from dotenv import load_dotenv
 import os
 
+import viz_utils
+import model_def
+
 load_dotenv() #load environment variables from .env file
 
 
 API_KEY = os.getenv("HUGGINGFACE_API_KEY")
 API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
 
-# --- MODEL DEFINITION --- (Provided by you) 
-class GNNEncoder(torch.nn.Module):
-    def __init__(self, hidden_channels, out_channels):
-        super().__init__()
-        self.conv1 = SAGEConv((-1, -1), hidden_channels)
-        self.conv2 = SAGEConv((-1, -1), out_channels)
-
-    def forward(self, x, edge_index):
-        x = self.conv1(x, edge_index).relu()
-        x = self.conv2(x, edge_index)
-        return x
-
-class EdgeDecoder(torch.nn.Module):
-    def __init__(self, hidden_channels):
-        super().__init__()
-        self.lin1 = Linear(2 * hidden_channels, hidden_channels)
-        self.lin2 = Linear(hidden_channels, 1)
-
-    def forward(self, z_dict, edge_label_index):
-        row, col = edge_label_index
-        z = torch.cat([z_dict['user'][row], z_dict['movie'][col]], dim=-1)
-        z = self.lin1(z).relu()
-        z = self.lin2(z)
-        return z.view(-1)
-
-class Model(torch.nn.Module):
-    def __init__(self, hidden_channels):
-        super().__init__()
-        self.encoder = GNNEncoder(hidden_channels, hidden_channels)
-        self.encoder = to_hetero(self.encoder, data.metadata(), aggr='sum')
-        self.decoder = EdgeDecoder(hidden_channels)
-
-    def forward(self, x_dict, edge_index_dict, edge_label_index):
-        z_dict = self.encoder(x_dict, edge_index_dict)
-        return self.decoder(z_dict, edge_label_index)
-
-
 # --- LOAD DATA AND MODEL ---
 movies_df = pd.read_csv("./sampled_movie_dataset/movies_metadata.csv")  # Load your movie data
 data = torch.load("./PyGdata.pt")
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = Model(hidden_channels=32).to(device) 
+model = model_def.Model(hidden_channels=32).to(device) 
 model.load_state_dict(torch.load("PyGTrainedModelState.pt"))
 model.eval()
 
@@ -66,6 +32,23 @@ model.eval()
 st.title("Movie Recommendation App")
 user_id = st.number_input("Enter the User ID:", min_value=0)
 
+with torch.no_grad():
+    a = model.encoder(data.x_dict,data.edge_index_dict)
+    user = pd.DataFrame(a['user'].detach().cpu())
+    movie = pd.DataFrame(a['movie'].detach().cpu())
+    embedding_df = pd.concat([user, movie], axis=0)
+
+st.subheader('UMAP Visualization')
+umap_fig = viz_utils.visualize_embeddings_umap(embedding_df)
+st.plotly_chart(umap_fig)
+
+st.subheader('TSNE Visualization')
+tsne_fig = viz_utils.visualize_embeddings_tsne(embedding_df)
+st.plotly_chart(tsne_fig)
+
+st.subheader('PCA Visualization')
+pca_fig = viz_utils.visualize_embeddings_pca(embedding_df)
+st.plotly_chart(pca_fig)
 
 
 
@@ -107,14 +90,14 @@ def generate_poster(movie_title):
 if st.button("Get Recommendations"):
     st.write("Top 5 Recommendations:")
     try:
-        total_movies = data['movie'].num_nodes  # Adjust if necessary
+        total_movies = data['movie'].num_nodes  
         recommended_movies = get_movie_recommendations(model, data, user_id, total_movies)
         cols = st.columns(3)  
 
        
         for i, row in recommended_movies.iterrows():
             with cols[i % 3]: 
-                ##st.write(f"{i+1}. {row['title']}")
+                #st.write(f"{i+1}. {row['title']}") 
                 try:
                     image = generate_poster(row['title'])
                 except requests.exceptions.HTTPError as err:
